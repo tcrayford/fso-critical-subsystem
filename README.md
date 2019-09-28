@@ -3,7 +3,7 @@
 This is a lua script for Freespace 2 Open that adds a HUD Gauge for "critical subsystems".
 The player can press (by default) the `d` key to select the next critical subsystem.
 
-![hud display](screenshot.png)
+![hud display](/screenshot.png)
 
 You define critical subsystems by using the `lua-add-critical-subsystem` sexp from FRED.
 
