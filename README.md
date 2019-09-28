@@ -29,6 +29,16 @@ The second piece of configuration is a table that lists out a hud element which 
 
 You can't display more critical subsystems than the length of this table.
 
+## Other configuration
+
+You can change the hotkey pretty easily too, change this line:
+
+```
+    self.Key = "D"
+```
+
+to a key of your choosing.
+
 ### SEXPs
 
 `lua-add-critical-subsystem`
