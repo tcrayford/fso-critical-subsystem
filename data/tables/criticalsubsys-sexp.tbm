@@ -1,0 +1,38 @@
+#Lua SEXPs
+
+$Operator: lua-next-critical-subsystem
+$Category: Change
+$Subcategory: Scripting
+$Minimum Arguments: 0
+$Maximum Arguments: 0
+$Return Type: Nothing
+$Description: This targets the next critical subsystem
+
+$Operator: lua-add-critical-subsystem
+$Category: Change
+$Subcategory: Scripting
+$Minimum Arguments: 2
+$Maximum Arguments: 2
+$Return Type: Nothing
+$Description: This adds a critical subsystem to the critical monitor
+$Parameter:
+	+Description: The ship
+	+Type: Ship
+$Parameter:
+	+Description: The subsystem
+	+Type: string
+
+$Operator: lua-remove-critical-subsystem
+$Category: Change
+$Subcategory: Scripting
+$Minimum Arguments: 2
+$Maximum Arguments: 2
+$Return Type: Nothing
+$Description: This removes a critical subsystem to the critical monitor
+$Parameter:
+	+Description: The ship
+	+Type: Ship
+$Parameter:
+	+Description: The subsystem
+	+Type: string
+#End

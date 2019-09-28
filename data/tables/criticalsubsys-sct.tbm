@@ -1,0 +1,281 @@
+#Conditional Hooks
+$Application: FS2_Open
+$On Game Init:
+[
+
+CriticalSubsys = {}
+
+function CriticalSubsys:Init()
+    self.Enabled = true
+    self.List = {}
+    self.Key = "D"
+    self.PlayerShipSig = nil
+    self.LastListRefresh = 0
+    self.HudGaugeTitle = "BPLowerRightMFD"
+    self.HudGauges = { "BPLowerRightMFDA", "BPLowerRightMFDB", "BPLowerRightMFDC", "BPLowerRightMFDD", "BPLowerRightMFDE", "BPLowerRightMFDF", "BPLowerRightMFDG", "BPLowerRightMFDH" }
+    self.HudVisible = false
+end
+
+function CriticalSubsys:Add(ship, subsystem)
+	if type(ship) == "string" then
+		ship = mn.List[ship]
+	end
+
+	local t = {}
+
+	if ship:isValid() then
+		if not self.Enabled then CriticalSubsys:Init() end
+        t.Sig = ship:getSignature()
+        t.Name = ship.Name
+        t.Subsys = subsystem
+	end
+
+    if not self:AlreadyExists(t) then
+        table.insert(self.List, t)
+        self:ReorderList()
+        self:RefreshList()
+    end
+end
+
+-- removes an entry
+function CriticalSubsys:Remove(ship, subsystem)
+	if type(ship) == "string" then
+		ship = mn.List[ship]
+	end
+    local shipSignature = ship:getSignature()
+    local listCount = #self.List
+    local selected = nil
+    if self.PlayerShipSig then
+        local me = mn.getObjectFromSignature(self.PlayerShipSig)
+        selected = self:SelectedIndex(me)
+    end
+    for i = 1, listCount do
+        local entry = self.List[i]
+        if entry.Sig == shipSignature then
+            if entry.Subsys == subsystem then
+                table.remove(self.List, i)
+                self:ReorderList()
+                self:RefreshList()
+                if selected == i then
+                    self:TargetNext()
+                end
+                return
+            end
+        end
+    end
+end
+
+function CriticalSubsys:AlreadyExists(other)
+    local listCount = #self.List
+    for i = 1, listCount do
+        local entry = self.List[i]
+        if entry.Sig == other.Sig then
+            if entry.Subsys == other.Subsys then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- this reorders the list so that all entries
+-- with the same ship name occur one after the other
+function CriticalSubsys:ReorderList()
+    local out = {}
+    local nextInsertPosition = {}
+    local listCount = #self.List
+    for i = 1, listCount do
+        local entry = self.List[i]
+        local j = nextInsertPosition[entry.Name]
+        if j then
+            table.insert(out, j, entry)
+            nextInsertPosition[entry.Name] = nextInsertPosition[entry.Name] + 1
+        else
+            table.insert(out, entry)
+            nextInsertPosition[entry.Name] = #out + 1
+        end
+    end
+    self.List = out
+end
+
+-- this draws the list onto the hud gauges
+-- specified.
+function CriticalSubsys:RefreshList()
+    local gaugeText = self:GaugeText()
+    for i = 1, #self.HudGauges do
+        local hudGauge = self.HudGauges[i]
+        if not self.HudVisible then
+            mn.runSEXP("( hud-set-custom-gauge-active (true) !" .. hudGauge .. "!)")
+        end
+
+        local text = gaugeText[i]
+        if text then
+            hu.getHUDGaugeHandle(hudGauge).Text = text
+        else
+            hu.getHUDGaugeHandle(hudGauge).Text = ""
+        end
+    end
+    if not self.HudVisible then
+        mn.runSEXP("( hud-set-custom-gauge-active (true) !" .. self.HudGaugeTitle .. "!)")
+        hu.getHUDGaugeHandle(self.HudGaugeTitle).Text = "MONITORING"
+    end
+    if #self.HudGauges < #gaugeText then
+        warning("had more than " .. #self.HudGauges .. " critical subsystems to target, which this code doesn't allow for right now")
+    end
+    self.HudVisible = true
+    self.LastListRefresh = mn.getMissionTime()
+end
+
+function CriticalSubsys:MaybeRefreshList()
+    -- refresh every 10ms
+    -- this is to catch the case where a player manually selects
+    -- one of the subsystems, we'd like to display the indicator
+    if mn.getMissionTime() > self.LastListRefresh + 0.01 then
+        self:RefreshList()
+    end
+end
+
+-- returns the text used to display in the gauge
+-- as a table with one entry per line
+function CriticalSubsys:GaugeText()
+    local out = {}
+    local selected = nil
+    if self.PlayerShipSig then
+        local me = mn.getObjectFromSignature(self.PlayerShipSig)
+        selected = self:SelectedIndex(me)
+    end
+    local currentShipName = nil
+    for i = 1, #self.List do
+        local entry = self.List[i]
+        if not (currentShipName == entry.Name) then
+            table.insert(out, entry.Name)
+        end
+        if i == selected then
+            table.insert(out, "> " .. entry.Subsys)
+        else
+            table.insert(out, "  " .. entry.Subsys)
+        end
+        currentShipName = entry.Name
+    end
+    return out
+end
+
+function CriticalSubsys:KeyPressed()
+    self.PlayerShipSig = hv.Player:getSignature()
+    if hv.Key == self.Key then
+        self:TargetNext()
+        self:RefreshList()
+    end
+end
+
+function CriticalSubsys:SelectedIndex(me)
+    local currentTarget = me.Target
+    if not currentTarget:isValid() then
+        return nil
+    end
+    local currentTargetSubsystem = me.TargetSubsystem
+    if not currentTargetSubsystem:isValid() then
+        return nil
+    end
+    local listCount = #self.List
+    for i = 1, listCount do
+        local entry = self.List[i]
+        if entry.Sig == currentTarget:getSignature() then
+            if entry.Subsys == currentTargetSubsystem.Name then
+                return i
+            end
+        end
+    end
+    return nil
+end
+
+function CriticalSubsys:NextTargetEntry(me)
+    local currentTarget = me.Target
+    if not currentTarget:isValid() then
+        return self.List[1]
+    end
+    local currentTargetSubsystem = me.TargetSubsystem
+    if not currentTargetSubsystem:isValid() then
+        return self.List[1]
+    end
+    if #self.List == 1 then
+        return self.List[1]
+    end
+    local listCount = #self.List
+    for i = 1, listCount do
+        local entry = self.List[i]
+        if entry.Sig == currentTarget:getSignature() then
+            if entry.Subsys == currentTargetSubsystem.Name then
+                if listCount > i then
+                    return self.List[i + 1]
+                else
+                    return self.List[1]
+                end
+            end
+        end
+    end
+    return self.List[1]
+end
+
+function CriticalSubsys:TargetNext()
+    local me = mn.getObjectFromSignature(self.PlayerShipSig)
+    if #self.List > 0 then
+        local entry = self:NextTargetEntry(me)
+        local ship = mn.getObjectFromSignature(entry.Sig)
+        if ship:isValid() then
+            local subsys = ship[entry.Subsys]
+            if subsys:isValid() then
+                me.Target = ship
+                me.TargetSubsystem = subsys
+            else
+                warning("subsystem not valid")
+            end
+        else
+            warning("ship not valid")
+        end
+    end
+end
+
+mn.LuaSEXPs["lua-next-critical-subsystem"].Action = function(ship, subsystem)
+    CriticalSubsys:TargetNext()
+    self:RefreshList()
+end
+
+mn.LuaSEXPs["lua-add-critical-subsystem"].Action = function(ship, subsystem)
+    CriticalSubsys:Add(ship, subsystem)
+end
+
+mn.LuaSEXPs["lua-remove-critical-subsystem"].Action = function(ship, subsystem)
+    CriticalSubsys:Remove(ship, subsystem)
+end
+]
+
+$State: GS_STATE_GAME_PLAY
+$On Gameplay Start:
+[
+	CriticalSubsys.Enabled = false
+	CriticalSubsys.List = {}
+]
+
+$On Key Pressed:
+[
+if CriticalSubsys.Enabled then
+    CriticalSubsys:KeyPressed(hv.Key)
+end
+]
+
+$On Frame:
+[
+if CriticalSubsys.Enabled then
+    CriticalSubsys:MaybeRefreshList()
+end
+]
+
+$On Subsystem Destroyed:
+[
+if CriticalSubsys.Enabled then
+    CriticalSubsys:Remove(hv.Ship, hv.Subsystem.Name)
+end
+]
+
+#End
